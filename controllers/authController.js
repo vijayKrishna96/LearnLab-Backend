@@ -1,15 +1,17 @@
 const bcrypt = require("bcryptjs");
-const User = require("../models/userModel");
-const { generateAccessToken, generateRefreshToken, verifyToken } = require("../utils/generateToken");
+const { User } = require("../models/userModel");
+const { 
+  generateAccessToken, 
+  generateRefreshToken, 
+  verifyToken 
+} = require("../utils/generateToken");
 
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user =
-      (await User.Student.findOne({ email }).select("+password")) ||
-      (await User.Instructor.findOne({ email }).select("+password")) ||
-      (await User.Admin.findOne({ email }).select("+password"));
+    // 🔥 Discriminator-aware query (much cleaner)
+    const user = await User.findOne({ email }).select("+password");
 
     if (!user)
       return res.status(404).json({ message: "User not found" });
@@ -30,21 +32,22 @@ const loginUser = async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 min
+      maxAge: 15 * 60 * 1000,
     });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({
       success: true,
       message: `${user.role} login successful`,
-      user: { id: user._id, role: user.role, email: user.email , name: user.name},
+      user: { id: user._id, role: user.role, email: user.email, name: user.name },
     });
+
   } catch (err) {
     return res.status(500).json({
       message: "Error logging in",
@@ -53,21 +56,40 @@ const loginUser = async (req, res) => {
   }
 };
 
-const verifyLogin = async (req, res) => {
+const refreshToken = async (req, res) => {
   try {
-    const token = req.cookies.accessToken;
-    if (!token) return res.status(401).json({ loggedIn: false });
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) return res.status(401).json({ message: "No refresh token" });
 
-    const decoded = verifyToken(token, process.env.JWT_SECRET);
-    if (!decoded) return res.status(401).json({ loggedIn: false });
+    const decoded = verifyToken(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    if (!decoded) return res.status(401).json({ message: "Invalid refresh token" });
 
-    return res.status(200).json({
-      loggedIn: true,
-      user: decoded,
+    // 🔥 Only need to query User — discriminator applied automatically
+    const user = await User.findById(decoded.id);
+    if (!user || !user.active) return res.status(403).json({ message: "User inactive" });
+
+    const newAccessToken = generateAccessToken(user);
+    const newRefreshToken = generateRefreshToken(user);
+
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000,
     });
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    return res.status(200).json({ success: true });
+
   } catch (err) {
     return res.status(500).json({
-      message: "Error verifying login",
+      message: "Refresh failed",
       error: err.message,
     });
   }
@@ -99,40 +121,47 @@ const logout = (req, res) => {
   }
 }
 
-const refreshToken = async (req, res) => {
+const verifyLogin = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
-    if (!refreshToken) return res.status(401).json({ message: "No refresh token" });
+    const token = req.cookies.accessToken;
+    if (!token) {
+      return res.status(200).json({ loggedIn: false, user: null });
+    }
 
-    const decoded = verifyToken(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-    if (!decoded) return res.status(401).json({ message: "Invalid refresh token" });
+    const decoded = verifyToken(token, process.env.JWT_SECRET);
+    if (!decoded) {
+      return res.status(200).json({ loggedIn: false, user: null });
+    }
 
-    // Find user by id (from decoded)
-    const user = await User[decoded.role.charAt(0).toUpperCase() + decoded.role.slice(1)].findById(decoded.id).select("+password"); // Or a unified User model
-    if (!user || !user.active) return res.status(403).json({ message: "User inactive" });
+    // Fetch user from DB
+    const user = await User.findById(decoded.id);
+    if (!user || !user.active) {
+      return res.status(200).json({ loggedIn: false, user: null });
+    }
 
-    // Generate new tokens
-    const newAccessToken = generateAccessToken(user);
-    const newRefreshToken = generateRefreshToken(user); // Rotate refresh token for security
-
-    // Set new cookies (full options copied from login)
-    res.cookie("accessToken", newAccessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 min
+    return res.status(200).json({
+      loggedIn: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        profilePicture: user.profilePicture || "",
+      }
     });
-    res.cookie("refreshToken", newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
 
-    return res.status(200).json({ success: true }); // Cookie-only: no need to return accessToken
   } catch (err) {
-    return res.status(500).json({ message: "Refresh failed", error: err.message });
+    return res.status(500).json({
+      loggedIn: false,
+      message: "Error verifying login",
+      error: err.message,
+    });
   }
 };
 
-module.exports = { loginUser, verifyLogin, logout , refreshToken };
+module.exports = {
+  loginUser,
+  refreshToken,
+  logout,
+  verifyLogin,
+};
