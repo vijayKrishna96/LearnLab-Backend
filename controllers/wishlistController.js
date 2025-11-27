@@ -1,12 +1,9 @@
-// const User = require("../models/userModel");
-// const Course = require("../models/courseModel");
 
-
+const Course = require("../models/courseModel");
 const { User } = require("../models/userModel");
 
 // ⭐ Add item to wishlist
-// ⭐ Add item to wishlist
-exports.addToWishlist = async (req, res) => {
+const addToWishlist = async (req, res) => {
     try {
         const userId = req.user.id;
         const { courseId } = req.params;
@@ -14,7 +11,7 @@ exports.addToWishlist = async (req, res) => {
         const user = await User.findById(userId);
         if (!user) return res.status(404).json({ message: "User not found" });
 
-        const course = await courseModel.findById(courseId);
+        const course = await Course.findById(courseId);
         if (!course) return res.status(404).json({ message: "Course not found" });
 
         // Prevent duplicate wishlist entries
@@ -30,9 +27,8 @@ exports.addToWishlist = async (req, res) => {
     }
 };
 
-
 // ⭐ Remove item from wishlist
-exports.removeFromWishlist = async (req, res) => {
+const removeFromWishlist = async (req, res) => {
     try {
         const userId = req.user.id;
         const { courseId } = req.params;
@@ -50,7 +46,7 @@ exports.removeFromWishlist = async (req, res) => {
 };
 
 // ⭐ Get wishlist (populated)
-exports.getWishlist = async (req, res) => {
+const getWishlist = async (req, res) => {
     try {
         const userId = req.user.id;
 
@@ -63,3 +59,9 @@ exports.getWishlist = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+module.exports = {
+    addToWishlist,
+    removeFromWishlist,
+    getWishlist
+}
