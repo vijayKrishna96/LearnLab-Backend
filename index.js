@@ -44,7 +44,7 @@ app.use(cookieParser());
 
 // Routes
 app.use("/user", userRoute);
-app.use("/course", courseRoute);
+app.use("/courses", courseRoute);
 app.use("/rating", reviewRoute);
 app.use("/cart", cartRoute);
 app.use("/category", categoryRoute);

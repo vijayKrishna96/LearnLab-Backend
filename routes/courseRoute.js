@@ -1,21 +1,83 @@
-const express = require('express')
-const { getAllCourse, getCourseById, addNewCourse, updateCourse, deleteCourse} = require('../controllers/courseController')
-const { upload } = require('../middleware/fileUpload')
-const { authUser } = require('../middleware/userAuth')
+const express = require("express");
+const router = express.Router();
+const multer = require("multer");
+const courseController = require("../controllers/courseController");
+const {
+  courseValidators,
+  handleValidationErrors,
+} = require("../validators/courseValidator");
 
+const upload = multer({ dest: "uploads/" });
 
-const router = express.Router()
+/* --------------------------------------
+   PUBLIC ROUTES (available without auth)
+--------------------------------------- */
 
-router.get('/', getAllCourse)
+// Public course list
+router.get("/public", courseController.getAllCourses);
 
-router.get('/:courseId', getCourseById)
+// Search
+router.get("/search", courseController.searchCourses);
 
-// router.get('/user/:userId' , getCoursesByUserId)
+// Filter
+router.get("/filter", courseController.filterCourses);
 
-router.post("/", upload.array("images" ,4), addNewCourse);
+// Preview (before purchase)
+router.get("/preview/:courseId", courseController.getCoursePreviewById);
 
-router.patch('/:courseId', upload.array("images",4), updateCourse)
+// Cart / Wishlist
+router.post("/cart", courseController.getCoursesForCart);
+router.post("/wishlist", courseController.getCoursesForWishlist);
 
-router.delete('/:courseId', deleteCourse)
+/* --------------------------------------
+   PROTECTED ROUTES (enrolled students)
+--------------------------------------- */
+
+router.get("/learning/:courseId", courseController.getFullCourseById);
+
+/* --------------------------------------
+   ADMIN / INSTRUCTOR ROUTES
+--------------------------------------- */
+
+router.post(
+  "/",
+  upload.array("images", 20),
+  courseValidators.createCourse,
+  handleValidationErrors,
+  courseController.createCourse
+);
+
+router.put(
+  "/:courseId",
+  upload.array("images", 20),
+  courseValidators.validateCourseId,
+  handleValidationErrors,
+  courseController.updateCourse
+);
+
+router.delete(
+  "/:courseId",
+  courseValidators.validateCourseId,
+  handleValidationErrors,
+  courseController.deleteCourse
+);
+
+/* --------------------------------------
+   SHARED ROUTES
+--------------------------------------- */
+
+router.post(
+  "/by-ids",
+  courseValidators.validateCourseIds,
+  handleValidationErrors,
+  courseController.getCoursesByIds
+);
+
+router.get(
+  "/:courseId",
+  courseValidators.validateCourseId,
+  handleValidationErrors,
+  courseController.getSingleCourse
+);
 
 module.exports = router;
