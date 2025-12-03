@@ -43,8 +43,11 @@ const createCheckout = async (req, res) => {
 
     // Check if user already owns any of these courses
     const user = await User.findById(userId).select("courses");
+    
+    // FIX: Check if user.courses exists before using includes
+    const userCourses = user.courses || [];
     const alreadyOwned = courses.filter(course => 
-      user.courses.includes(course._id)
+      userCourses.includes(course._id.toString())
     );
 
     if (alreadyOwned.length > 0) {
@@ -77,7 +80,7 @@ const createCheckout = async (req, res) => {
       payment_method_types: ["card"],
       line_items: lineItems,
       mode: "payment",
-      // FIXED: Add payment_success parameter
+      // FIXED: Use template literal to properly handle the placeholder
       success_url: `${process.env.FRONTEND_URL}/cart?session_id={CHECKOUT_SESSION_ID}&payment_success=true`,
       cancel_url: `${process.env.FRONTEND_URL}/cart?canceled=true`,
       client_reference_id: userId,
@@ -86,8 +89,7 @@ const createCheckout = async (req, res) => {
         courseIds: JSON.stringify(courseIds),
         instructorIds: JSON.stringify(courses.map(c => c.instructor._id.toString())),
       },
-      expires_at: Math.floor(Date.now() / 1000) + (30 * 60),
-      // Enable automatic tax calculation if needed
+      expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes from now
       automatic_tax: { enabled: false },
     });
 
@@ -231,7 +233,7 @@ async function processEnrollment(userId, courseIds, instructorIds, sessionId, pa
         completedAt: new Date(),
         paymentIntentId
       },
-      { session: sessionDb, upsert: false }
+      { session: sessionDb }
     );
 
     await sessionDb.commitTransaction();
@@ -261,7 +263,11 @@ const webHook = async (req, res) => {
 
   try {
     // Verify webhook signature
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(
+      req.rawBody || req.body, // Use rawBody for webhooks
+      sig, 
+      webhookSecret
+    );
   } catch (err) {
     console.error("Webhook signature verification failed:", err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -339,7 +345,7 @@ const webHook = async (req, res) => {
         console.log(`❌ Async payment failed: ${failedSession.id}`);
         
         await Payment.findOneAndUpdate(
-          { sessionId: failedSession.id },
+          { sessionId: failedSession.id, status: "pending" },
           { status: "failed", failedAt: new Date() }
         );
         break;
