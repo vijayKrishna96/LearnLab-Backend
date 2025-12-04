@@ -1,16 +1,17 @@
 const express = require('express');
 const { getAllUsers, registerUser, updateUser, deleteUser,  userProfile, checkUser, getUserById, } = require('../controllers/userController');
 const { protect, admin } = require('../middleware/Protected');
-const { authUser } = require('../middleware/userAuth');
+
 const { upload } = require('../middleware/fileUpload');
+const userAuth = require('../middleware/userAuth');
 const router = express.Router();
 
 
-router.get ('/profile' ,authUser,  userProfile);
+router.get ('/profile' ,userAuth,  userProfile);
 
 router.get('/users' , getAllUsers)
 
-router.get('/checkUser' ,authUser, checkUser)
+router.get('/checkUser' ,userAuth, checkUser)
 
 router.get('/:userId' , getUserById);
 

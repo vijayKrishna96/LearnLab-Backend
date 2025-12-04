@@ -1,21 +1,18 @@
 const express = require("express");
 // const stripe = require("stripe")(process.env.VITE_STRIPE_KEY);
 const jwt = require("jsonwebtoken");
-const { createCheckout, verifyPayment, getPaymentStatus, webHook } = require("../controllers/paymentController");
+const { createCheckout, verifyPayment, getPaymentStatus, webHook, verifyPaymentPublic } = require("../controllers/paymentController");
 const authMiddleware = require("../middleware/authMiddleware");
+const userAuth = require("../middleware/userAuth");
 
 const router = express.Router();
 
 // Protected routes (require authentication)
 router.post("/create-checkout",authMiddleware, createCheckout);
-router.post("/verify",authMiddleware, verifyPayment);
-router.get("/status/:sessionId",authMiddleware, getPaymentStatus);
+router.post("/verify",userAuth, verifyPayment);
 
 // Webhook route - NO AUTH, uses raw body
-// Note: This route should be registered with express.raw() in app.js
 router.post("/webhook",authMiddleware, webHook);
-
-
 
 // router.post("/create-checkout", async (req, res) => {
 //   const { product, returnUrl } = req.body;

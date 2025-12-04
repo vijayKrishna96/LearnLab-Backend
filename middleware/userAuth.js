@@ -1,34 +1,47 @@
-const { verifyToken } = require("../utils/generateToken");
+// middleware/authMiddleware.js
+const jwt = require('jsonwebtoken');
 
-
-const authUser = (req, res, next) => {
+const userAuth = (req, res, next) => {
   try {
-    const token = req.cookies.accessToken;
-
+    console.log(req)
+    // Try to get token from cookie first, then fall back to Authorization header
+    let token = req.cookies.accessToken;
+    
+    // Fallback: check Authorization header
     if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "User not authenticated",
+      const authHeader = req.header('Authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.replace('Bearer ', '');
+      }
+    }
+    
+    if (!token) {
+      return res.status(401).json({ 
+        message: 'No token, authorization denied',
+        error: 'Unauthorized' 
       });
     }
 
-    const decoded = verifyToken(token, process.env.JWT_SECRET);
-
-    if (!decoded) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired token",
-      });
-    }
-
-    req.user = decoded; // id, email, role
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    
     next();
-  } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        message: 'Token expired',
+        error: 'TokenExpired' 
+      });
+    }
+    
+    res.status(401).json({ 
+      message: 'Token is not valid',
+      error: 'InvalidToken' 
     });
   }
 };
 
-module.exports = { authUser };
+module.exports = userAuth;
