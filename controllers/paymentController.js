@@ -3,7 +3,8 @@ const express = require("express");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const Course = require("../models/courseModel");
 const Payment = require("../models/paymentModel");
-const { User } = require("../models/userModel");
+const { Student, Instructor, User } = require("../models/userModel");
+const mongoose = require("mongoose");
 
 /**
  * Create Stripe checkout session
@@ -196,36 +197,82 @@ const verifyPayment = async (req, res) => {
 /**
  * Process course enrollment (shared between verify and webhook)
  */
-async function processEnrollment(userId, courseIds, instructorIds, sessionId, paymentIntentId) {
-  const sessionDb = await User.startSession();
-  await sessionDb.startTransaction();
+const processEnrollment = async (userId, courseIds, instructorIds, sessionId, paymentIntentId) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
   try {
-    // Update user's courses and clear cart
-    await User.findByIdAndUpdate(
-      userId,
-      {
-        $addToSet: { courses: { $each: courseIds } },
-        $pull: { cart: { $in: courseIds } }
-      },
-      { session: sessionDb }
+    // 1. Add courses to student's purchasedCourses
+    const student = await Student.findById(userId).session(session);
+    
+    if (!student) {
+      throw new Error(`Student not found: ${userId}`);
+    }
+
+    // Prevent duplicate purchases
+    const alreadyPurchased = student.purchasedCourses
+      .map(p => p.course.toString())
+      .filter(id => courseIds.includes(id));
+
+    if (alreadyPurchased.length > 0) {
+      console.warn(`User ${userId} already owns courses: ${alreadyPurchased}`);
+      // Don't throw error - mark as completed anyway to prevent retry
+    } else {
+      // Add new purchases
+      const newPurchases = courseIds.map(courseId => ({
+        course: courseId,
+        purchasedAt: new Date()
+      }));
+      
+      student.purchasedCourses.push(...newPurchases);
+    }
+
+    // 2. Initialize course progress for new purchases
+    const newProgressEntries = courseIds
+      .filter(id => !student.courseProgress.some(p => p.course.toString() === id))
+      .map(courseId => ({
+        course: courseId,
+        progress: 0,
+        lastViewed: new Date()
+      }));
+    
+    student.courseProgress.push(...newProgressEntries);
+
+    // 3. Clear purchased courses from cart
+    student.cart = student.cart.filter(
+      cartCourse => !courseIds.includes(cartCourse.toString())
     );
 
-    // Update each course's student list
+    await student.save({ session });
+
+    // 4. Update courses (increment enrolled students)
     await Course.updateMany(
       { _id: { $in: courseIds } },
-      { $addToSet: { students: userId } },
-      { session: sessionDb }
+      { $inc: { enrolledStudents: 1 } },
+      { session }
     );
 
-    // Update instructors' student lists
-    await User.updateMany(
-      { _id: { $in: instructorIds } },
-      { $addToSet: { students: userId } },
-      { session: sessionDb }
-    );
+    // 5. Update instructors' stats
+    for (let i = 0; i < courseIds.length; i++) {
+      const courseId = courseIds[i];
+      const instructorId = instructorIds[i];
+      
+      const course = await Course.findById(courseId).session(session);
+      if (course && instructorId) {
+        await Instructor.findByIdAndUpdate(
+          instructorId,
+          { 
+            $inc: { 
+              totalIncome: course.price,
+              studentsTaughtCount: 1 
+            }
+          },
+          { session }
+        );
+      }
+    }
 
-    // Update payment record
+    // 6. Update payment record
     await Payment.findOneAndUpdate(
       { sessionId },
       { 
@@ -233,23 +280,28 @@ async function processEnrollment(userId, courseIds, instructorIds, sessionId, pa
         completedAt: new Date(),
         paymentIntentId
       },
-      { session: sessionDb }
+      { session }
     );
 
-    await sessionDb.commitTransaction();
+    await session.commitTransaction();
+    console.log(`✅ Successfully enrolled user ${userId} in ${courseIds.length} courses`);
+
   } catch (error) {
-    await sessionDb.abortTransaction();
+    await session.abortTransaction();
+    console.error("Enrollment processing error:", error);
     throw error;
   } finally {
-    sessionDb.endSession();
+    session.endSession();
   }
-}
+};
 
 /**
  * Webhook handler for Stripe events
  * POST /payment/webhook
  * CRITICAL: This is the authoritative source of payment completion
  */
+// Helper function (add before webhook)
+
 const webHook = async (req, res) => {
   const sig = req.headers["stripe-signature"];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -262,9 +314,8 @@ const webHook = async (req, res) => {
   let event;
 
   try {
-    // Verify webhook signature
     event = stripe.webhooks.constructEvent(
-      req.rawBody || req.body, // Use rawBody for webhooks
+      req.rawBody || req.body,
       sig, 
       webhookSecret
     );
@@ -273,25 +324,22 @@ const webHook = async (req, res) => {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Handle the event
   try {
     switch (event.type) {
       case "checkout.session.completed":
         const session = event.data.object;
         console.log(`✅ Payment successful for session: ${session.id}`);
 
-        // Check if already processed (idempotency)
         const existingPayment = await Payment.findOne({ 
           sessionId: session.id, 
           status: "completed" 
         });
 
         if (existingPayment) {
-          console.log(`Session ${session.id} already processed, skipping`);
+          console.log(`Session ${session.id} already processed`);
           break;
         }
 
-        // Only process if payment is complete
         if (session.payment_status === "paid") {
           const userId = session.client_reference_id;
           const courseIds = JSON.parse(session.metadata.courseIds);
@@ -304,15 +352,11 @@ const webHook = async (req, res) => {
             session.id, 
             session.payment_intent
           );
-
-          console.log(`✅ Enrollment completed for user ${userId}`);
         }
         break;
 
       case "checkout.session.expired":
         const expiredSession = event.data.object;
-        console.log(`⏰ Session expired: ${expiredSession.id}`);
-        
         await Payment.findOneAndUpdate(
           { sessionId: expiredSession.id, status: "pending" },
           { status: "expired", expiredAt: new Date() }
@@ -320,11 +364,9 @@ const webHook = async (req, res) => {
         break;
 
       case "checkout.session.async_payment_succeeded":
-        // Handle delayed payment methods (bank transfers, etc.)
         const asyncSession = event.data.object;
-        console.log(`✅ Async payment succeeded: ${asyncSession.id}`);
-        
         const payment = await Payment.findOne({ sessionId: asyncSession.id });
+        
         if (payment && payment.status !== "completed") {
           const userId = asyncSession.client_reference_id;
           const courseIds = JSON.parse(asyncSession.metadata.courseIds);
@@ -342,8 +384,6 @@ const webHook = async (req, res) => {
 
       case "checkout.session.async_payment_failed":
         const failedSession = event.data.object;
-        console.log(`❌ Async payment failed: ${failedSession.id}`);
-        
         await Payment.findOneAndUpdate(
           { sessionId: failedSession.id, status: "pending" },
           { status: "failed", failedAt: new Date() }
@@ -351,15 +391,13 @@ const webHook = async (req, res) => {
         break;
 
       default:
-        console.log(`ℹ️ Unhandled event type: ${event.type}`);
+        console.log(`Unhandled event: ${event.type}`);
     }
 
-    // Return 200 to acknowledge receipt
     res.json({ received: true });
 
   } catch (error) {
-    console.error(`Error processing webhook event ${event.type}:`, error);
-    // Still return 200 to prevent Stripe from retrying
+    console.error(`Error processing ${event.type}:`, error);
     res.status(200).json({ received: true, error: error.message });
   }
 };
