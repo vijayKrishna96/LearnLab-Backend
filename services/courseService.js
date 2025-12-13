@@ -5,6 +5,7 @@ class CourseService {
   async checkDuplicateTitle(title, excludeId = null) {
     const query = {
       title: { $regex: new RegExp(`^${title}$`, "i") },
+      isDeleted: { $ne: true }, // Exclude soft-deleted courses
     };
     if (excludeId) {
       query._id = { $ne: excludeId };
@@ -22,10 +23,12 @@ class CourseService {
   // Get all courses with filters
   async getAllCourses(filters = {}) {
     const query = this.buildQuery(filters);
+    // Add isDeleted filter
+    query.isDeleted = { $ne: true };
 
     return await Course.find(query)
-      .populate("categoryDetails", "name")
-      .populate("instructorDetails", "name email profilePicture")
+      .populate("category", "name")
+      .populate("instructor", "name email profilePicture")
       .select(
         "title description price image.url averageRating status isFree level language enrollmentCount totalDuration slug"
       )
@@ -36,32 +39,42 @@ class CourseService {
 
   // Get courses by array of IDs
   async getCoursesByIds(ids) {
-    return await Course.find({ _id: { $in: ids } })
-      .populate("instructorDetails", "name profilePicture")
-      .select("title image.url duration thumbnailImage instructor")
+    return await Course.find({ 
+      _id: { $in: ids },
+      isDeleted: { $ne: true }
+    })
+      .populate("instructor", "name profilePicture")
+      .select("title image.url totalDuration instructor")
       .exec();
   }
 
   // Get single course by ID
   async getCourseById(id) {
-    return await Course.findById(id)
-      .populate("categoryDetails", "name description")
-      .populate("instructorDetails", "name email profilePicture bio")
-      .populate("studentDetails", "name email profilePicture")
+    return await Course.findOne({ 
+      _id: id,
+      isDeleted: { $ne: true }
+    })
+      .populate("category", "name description")
+      .populate("instructor", "name email profilePicture bio")
+      .populate("students", "name email profilePicture")
       .populate("reviews.userId", "name profilePicture")
       .exec();
   }
 
   // Get course preview (public view)
   async getCoursePreviewById(id) {
-    return await Course.findById(id)
-      .populate("categoryDetails", "name description")
+    return await Course.findOne({ 
+      _id: id,
+      isDeleted: { $ne: true },
+      status: "published" // Only show published courses in preview
+    })
+      .populate("category", "name description")
       .populate(
-        "instructorDetails",
-        "name email profilePicture bio rating totalStudents"
+        "instructor",
+        "name email profilePicture bio"
       )
       .select(
-        "title description price image.url averageRating totalRatings enrollmentCount totalDuration level language requirements whatYouWillLearn tags promoVideo modules.title modules.duration modules.lessons.title modules.lessons.duration slug status createdAt"
+        "title description price image.url averageRating enrollmentCount totalDuration level language requirements whatYouWillLearn tags promoVideo modules.moduleNumber modules.title modules.lessons.title modules.lessons.duration modules.lessons.isPreview slug status createdAt"
       )
       .exec();
   }
@@ -92,10 +105,10 @@ class CourseService {
 
     const [courses, total] = await Promise.all([
       Course.find(searchQuery)
-        .populate("categoryDetails", "name")
-        .populate("instructorDetails", "name profilePicture")
+        .populate("category", "name")
+        .populate("instructor", "name profilePicture")
         .select(
-          "title description price image.url averageRating totalRatings enrollmentCount totalDuration level language slug isFree"
+          "title description price image.url averageRating enrollmentCount totalDuration level language slug isFree"
         )
         .sort(sortOptions)
         .skip(skip)
@@ -128,10 +141,12 @@ class CourseService {
   // Filter courses
   async filterCourses(filters = {}) {
     const query = this.buildQuery(filters);
+    // Add isDeleted filter
+    query.isDeleted = { $ne: true };
 
     return await Course.find(query)
-      .populate("categoryDetails", "name")
-      .populate("instructorDetails", "name profilePicture")
+      .populate("category", "name")
+      .populate("instructor", "name profilePicture")
       .select(
         "title description price image.url averageRating enrollmentCount totalDuration level language slug isFree"
       )
@@ -142,8 +157,12 @@ class CourseService {
 
   // Get courses for cart (minimal data)
   async getCoursesForCart(ids) {
-    return await Course.find({ _id: { $in: ids } })
-      .populate("instructorDetails", "name profilePicture")
+    return await Course.find({ 
+      _id: { $in: ids },
+      isDeleted: { $ne: true },
+      status: "published" // Only published courses in cart
+    })
+      .populate("instructor", "name profilePicture")
       .select("title image.url price instructor isFree slug")
       .lean()
       .exec();
@@ -151,10 +170,14 @@ class CourseService {
 
   // Get courses for wishlist (minimal data)
   async getCoursesForWishlist(ids) {
-    return await Course.find({ _id: { $in: ids } })
-      .populate("instructorDetails", "name profilePicture")
+    return await Course.find({ 
+      _id: { $in: ids },
+      isDeleted: { $ne: true },
+      status: "published" // Only published courses in wishlist
+    })
+      .populate("instructor", "name profilePicture")
       .select(
-        "title image.url price averageRating totalRatings enrollmentCount totalDuration modulesCount instructor slug isFree"
+        "title image.url price averageRating enrollmentCount totalDuration instructor slug isFree"
       )
       .lean()
       .exec();
@@ -164,17 +187,15 @@ class CourseService {
 
   // Get full course content (for enrolled students)
   async getFullCourseById(id) {
-    return await Course.findById(id)
-      .populate("categoryDetails", "name description")
+    return await Course.findOne({ 
+      _id: id,
+      isDeleted: { $ne: true }
+    })
+      .populate("category", "name description")
       .populate(
-        "instructorDetails",
-        "name email profilePicture bio socialLinks"
+        "instructor",
+        "name email profilePicture bio"
       )
-      .populate({
-        path: "modules.lessons",
-        select: "title duration videoUrl content resources order isPreview",
-        options: { sort: { order: 1 } },
-      })
       .populate("reviews.userId", "name profilePicture")
       .select("-__v")
       .exec();
@@ -182,16 +203,24 @@ class CourseService {
 
   // Verify user enrollment
   async verifyEnrollment(courseId, userId) {
-    const course = await Course.findById(courseId).select("students").exec();
+    const course = await Course.findOne({ 
+      _id: courseId,
+      isDeleted: { $ne: true }
+    })
+      .select("students")
+      .exec();
 
-    return course && course.students.includes(userId);
+    return course && course.students.some(studentId => studentId.equals(userId));
   }
 
   // 🔹 HELPER METHODS
 
   // Build search query with advanced filters
   buildSearchQuery({ query, category, level, priceRange, rating }) {
-    const searchQuery = { status: "published" };
+    const searchQuery = { 
+      status: "published",
+      isDeleted: { $ne: true }
+    };
 
     // Text search
     if (query) {
@@ -199,7 +228,6 @@ class CourseService {
         { title: { $regex: query, $options: "i" } },
         { description: { $regex: query, $options: "i" } },
         { tags: { $in: [new RegExp(query, "i")] } },
-        { "instructorDetails.name": { $regex: query, $options: "i" } },
       ];
     }
 
@@ -248,11 +276,7 @@ class CourseService {
   // Build sort options
   buildSortOptions(sortBy) {
     const sortOptions = {
-      relevance: {
-        score: { $meta: "textScore" },
-        averageRating: -1,
-        enrollmentCount: -1,
-      },
+      relevance: { averageRating: -1, enrollmentCount: -1 },
       popular: { enrollmentCount: -1, averageRating: -1 },
       rating: { averageRating: -1, enrollmentCount: -1 },
       newest: { createdAt: -1 },
@@ -266,21 +290,16 @@ class CourseService {
 
   // Update course
   async updateCourse(id, updateData) {
-    const course = await Course.findByIdAndUpdate(
-      id,
-      { $set: { ...updateData, lastUpdated: Date.now() } },
+    const course = await Course.findOneAndUpdate(
+      { _id: id, isDeleted: { $ne: true } },
+      { $set: updateData },
       { new: true, runValidators: true }
     ).populate([
-      { path: "categoryDetails", select: "name" },
-      { path: "instructorDetails", select: "name email profilePicture" },
+      { path: "category", select: "name" },
+      { path: "instructor", select: "name email profilePicture" },
     ]);
 
     return course;
-  }
-
-  // Delete course
-  async deleteCourse(id) {
-    return await Course.findByIdAndDelete(id).exec();
   }
 
   // Helper: Build query from filters
@@ -321,13 +340,169 @@ class CourseService {
     return query;
   }
 
-  async getCoursesByInstructorId(instructorId) {
-    return await Course.find({ instructor: instructorId })
-      .populate("categoryDetails", "name")
-      .populate("instructorDetails", "firstName lastName email profileImage")
-      .select("-modules -reviews")
-      .sort({ createdAt: -1 });
-  }
+  // Get courses by instructor with optional status filter
+  getCoursesByInstructorId = async (instructorId, status = null) => {
+    let query = Course.find({
+      instructor: instructorId,
+      isDeleted: { $ne: true },
+    });
+
+    // Apply status filter if provided
+    if (status) {
+      query = query.where({ status });
+    }
+
+    const courses = await query
+      .populate("category", "name")
+      .sort({ lastEditedAt: -1 })
+      .lean();
+
+    return courses;
+  };
+
+  // Publish course
+  publishCourse = async (courseId) => {
+    const course = await Course.findOne({ 
+      _id: courseId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!course) {
+      return {
+        success: false,
+        message: "Course not found",
+      };
+    }
+
+    // Use the model's instance method
+    try {
+      await course.publish();
+      return {
+        success: true,
+        course,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  };
+
+  // Unpublish course
+  unpublishCourse = async (courseId) => {
+    const course = await Course.findOne({ 
+      _id: courseId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!course) {
+      return {
+        success: false,
+        message: "Course not found",
+      };
+    }
+
+    // Use the model's instance method
+    try {
+      await course.unpublish();
+      return {
+        success: true,
+        course,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  };
+
+  // Archive course
+  archiveCourse = async (courseId, reason = null) => {
+    const course = await Course.findOne({ 
+      _id: courseId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!course) {
+      return {
+        success: false,
+        message: "Course not found",
+      };
+    }
+
+    // Use the model's instance method
+    try {
+      await course.archive(reason);
+      return {
+        success: true,
+        course,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  };
+
+  // Unarchive course
+  unarchiveCourse = async (courseId) => {
+    const course = await Course.findOne({ 
+      _id: courseId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!course) {
+      return {
+        success: false,
+        message: "Course not found",
+      };
+    }
+
+    // Use the model's instance method
+    try {
+      await course.unarchive();
+      return {
+        success: true,
+        course,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  };
+
+  // Soft delete course
+  deleteCourse = async (courseId) => {
+    const course = await Course.findOne({ 
+      _id: courseId,
+      isDeleted: { $ne: true }
+    });
+
+    if (!course) {
+      return {
+        success: false,
+        message: "Course not found",
+      };
+    }
+
+    // Use the model's instance method
+    try {
+      await course.softDelete();
+      return {
+        success: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.message,
+      };
+    }
+  };
 }
 
 module.exports = new CourseService();

@@ -1,21 +1,33 @@
-const { default: mongoose } = require('mongoose');
-const asyncHandler = require('../middleware/asyncHandler'); // We'll create this
-const Course = require('../models/courseModel');
-const courseService = require('../services/courseService');
-const imageService = require('../services/imageService');
-const CourseUtils = require('../utils/courseUtils');
+const { default: mongoose } = require("mongoose");
+const asyncHandler = require("../middleware/asyncHandler");
+const courseService = require("../services/courseService");
+const imageService = require("../services/imageService");
+const CourseUtils = require("../utils/courseUtils");
 
 class CourseController {
   // Create new course
   createCourse = asyncHandler(async (req, res) => {
-    const { title, description, category, price, modules, instructor, promoVideo, level, language, requirements, whatYouWillLearn, tags } = req.body;
+    const {
+      title,
+      description,
+      category,
+      price,
+      modules,
+      instructor,
+      promoVideo,
+      level,
+      language,
+      requirements,
+      whatYouWillLearn,
+      tags,
+    } = req.body;
 
     // Check for duplicate
     const duplicate = await courseService.checkDuplicateTitle(title);
     if (duplicate) {
       return res.status(409).json({
         success: false,
-        message: "A course with this title already exists"
+        message: "A course with this title already exists",
       });
     }
 
@@ -24,7 +36,10 @@ class CourseController {
 
     // Process modules
     const parsedModules = CourseUtils.parseModules(modules);
-    const processedModules = CourseUtils.processModules(parsedModules, uploadedImages);
+    const processedModules = CourseUtils.processModules(
+      parsedModules,
+      uploadedImages
+    );
     const totalDuration = CourseUtils.calculateTotalDuration(parsedModules);
 
     // Create course
@@ -42,7 +57,7 @@ class CourseController {
       whatYouWillLearn,
       tags,
       modules: processedModules,
-      totalDuration
+      totalDuration,
     };
 
     const course = await courseService.createCourse(courseData);
@@ -50,7 +65,7 @@ class CourseController {
     res.status(201).json({
       success: true,
       message: "Course created successfully",
-      course
+      course,
     });
   });
 
@@ -62,14 +77,14 @@ class CourseController {
       return res.status(404).json({
         success: false,
         message: "No courses found",
-        courses: []
+        courses: [],
       });
     }
 
     res.status(200).json({
       success: true,
       count: courses.length,
-      courses
+      courses,
     });
   });
 
@@ -82,8 +97,8 @@ class CourseController {
     if (courses.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'No courses found for the provided IDs',
-        requestedIds: ids
+        message: "No courses found for the provided IDs",
+        requestedIds: ids,
       });
     }
 
@@ -94,9 +109,9 @@ class CourseController {
       count: courses.length,
       courses,
       ...(notFoundIds.length > 0 && {
-        warning: 'Some course IDs were not found',
-        notFoundIds
-      })
+        warning: "Some course IDs were not found",
+        notFoundIds,
+      }),
     });
   });
 
@@ -109,13 +124,13 @@ class CourseController {
     if (!course) {
       return res.status(404).json({
         success: false,
-        message: 'Course not found'
+        message: "Course not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      course
+      course,
     });
   });
 
@@ -129,17 +144,20 @@ class CourseController {
     if (!existingCourse) {
       return res.status(404).json({
         success: false,
-        message: "Course not found"
+        message: "Course not found",
       });
     }
 
     // Check duplicate title
     if (title && title !== existingCourse.title) {
-      const duplicate = await courseService.checkDuplicateTitle(title, courseId);
+      const duplicate = await courseService.checkDuplicateTitle(
+        title,
+        courseId
+      );
       if (duplicate) {
         return res.status(409).json({
           success: false,
-          message: "A course with this title already exists"
+          message: "A course with this title already exists",
         });
       }
     }
@@ -152,8 +170,14 @@ class CourseController {
     }
 
     // Process modules
-    const parsedModules = modules ? CourseUtils.parseModules(modules) : existingCourse.modules;
-    const processedModules = CourseUtils.processModules(parsedModules, uploadedImages, existingCourse);
+    const parsedModules = modules
+      ? CourseUtils.parseModules(modules)
+      : existingCourse.modules;
+    const processedModules = CourseUtils.processModules(
+      parsedModules,
+      uploadedImages,
+      existingCourse
+    );
     const totalDuration = CourseUtils.calculateTotalDuration(parsedModules);
 
     // Update data
@@ -162,40 +186,18 @@ class CourseController {
       modules: processedModules,
       totalDuration,
       image: uploadedImages[0] || existingCourse.image,
-      ...otherData
+      ...otherData,
     };
 
-    const updatedCourse = await courseService.updateCourse(courseId, updateData);
+    const updatedCourse = await courseService.updateCourse(
+      courseId,
+      updateData
+    );
 
     res.status(200).json({
       success: true,
       message: "Course updated successfully",
-      course: updatedCourse
-    });
-  });
-
-  // Delete course
-  deleteCourse = asyncHandler(async (req, res) => {
-    const { courseId } = req.params;
-
-    const course = await courseService.deleteCourse(courseId);
-
-    if (!course) {
-      return res.status(404).json({
-        success: false,
-        message: "Course not found"
-      });
-    }
-
-    await imageService.deleteCourseImages(course);
-
-    res.status(200).json({
-      success: true,
-      message: "Course deleted successfully",
-      deletedCourse: {
-        id: course._id,
-        title: course.title
-      }
+      course: updatedCourse,
     });
   });
 
@@ -208,19 +210,28 @@ class CourseController {
     if (!course) {
       return res.status(404).json({
         success: false,
-        message: 'Course not found'
+        message: "Course not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      course
+      course,
     });
   });
 
   // Search courses
   searchCourses = asyncHandler(async (req, res) => {
-    const { query, category, level, priceRange, rating, sortBy, page = 1, limit = 10 } = req.query;
+    const {
+      query,
+      category,
+      level,
+      priceRange,
+      rating,
+      sortBy,
+      page = 1,
+      limit = 10,
+    } = req.query;
 
     const searchResults = await courseService.searchCourses({
       query,
@@ -230,37 +241,36 @@ class CourseController {
       rating,
       sortBy,
       page: parseInt(page),
-      limit: parseInt(limit)
+      limit: parseInt(limit),
     });
 
     res.status(200).json({
       success: true,
-      ...searchResults
+      ...searchResults,
     });
   });
 
   // Filter courses
   filterCourses = asyncHandler(async (req, res) => {
     const filters = req.query;
-    
+
     const courses = await courseService.filterCourses(filters);
 
     res.status(200).json({
       success: true,
       count: courses.length,
-      courses
+      courses,
     });
   });
 
   // Get courses for cart (minimal data)
   getCoursesForCart = asyncHandler(async (req, res) => {
-    console.log(req.body)
     const { ids } = req.body;
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Course IDs array is required'
+        message: "Course IDs array is required",
       });
     }
 
@@ -269,19 +279,18 @@ class CourseController {
     res.status(200).json({
       success: true,
       count: courses.length,
-      courses
+      courses,
     });
   });
 
   // Get courses for wishlist (minimal data)
   getCoursesForWishlist = asyncHandler(async (req, res) => {
-    console.log(req.body)
     const { ids } = req.body;
 
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'Course IDs array is required'
+        message: "Course IDs array is required",
       });
     }
 
@@ -290,7 +299,7 @@ class CourseController {
     res.status(200).json({
       success: true,
       count: courses.length,
-      courses
+      courses,
     });
   });
 
@@ -300,13 +309,13 @@ class CourseController {
     const { courseId } = req.params;
     const { userId } = req.user; // Assuming user is authenticated and enrolled
 
-    // You might want to add enrollment verification here
+    // Verify enrollment
     const isEnrolled = await courseService.verifyEnrollment(courseId, userId);
-    
+
     if (!isEnrolled) {
       return res.status(403).json({
         success: false,
-        message: 'You are not enrolled in this course'
+        message: "You are not enrolled in this course",
       });
     }
 
@@ -315,52 +324,207 @@ class CourseController {
     if (!course) {
       return res.status(404).json({
         success: false,
-        message: 'Course not found'
+        message: "Course not found",
       });
     }
 
     res.status(200).json({
       success: true,
-      course
+      course,
     });
   });
 
-  // Get all courses by instructor ID
- 
- getCoursesByInstructorId = asyncHandler(async (req, res) => {
-  const { instructorId } = req.params;
+  // Get instructor's courses with optional status filter
+  getCoursesByInstructorId = asyncHandler(async (req, res) => {
+    const { instructorId } = req.params;
+    const { status } = req.query; // Optional: 'draft', 'published', 'archived'
 
-  // Validate ObjectId
-  if (!mongoose.Types.ObjectId.isValid(instructorId)) {
-    return res.status(400).json({
-      success: false,
-      message: 'Invalid instructor ID format'
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(instructorId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid instructor ID format",
+      });
+    }
+
+    // Validate status if provided
+    if (status && !["draft", "published", "archived"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status. Must be: draft, published, or archived",
+      });
+    }
+
+    // Call service
+    const courses = await courseService.getCoursesByInstructorId(
+      instructorId,
+      status
+    );
+
+    // No courses found
+    if (!courses || courses.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: status
+          ? `No ${status} courses found for this instructor`
+          : "No courses found for this instructor",
+        data: [],
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      count: courses.length,
+      data: courses,
     });
-  }
-
-  // Call service
-  const courses = await courseService.getCoursesByInstructorId(instructorId);
-
-  // No courses found
-  if (!courses || courses.length === 0) {
-    return res.status(404).json({
-      success: false,
-      message: 'No courses found for this instructor',
-      data: []
-    });
-  }
-
-  res.status(200).json({
-    success: true,
-    count: courses.length,
-    data: courses
   });
-});
 
+  // Publish a course
+  publishCourse = asyncHandler(async (req, res) => {
+    const { courseId } = req.params;
 
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
+    // Call service
+    const result = await courseService.publishCourse(courseId);
+
+    // Check for validation errors
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Course published successfully",
+      data: result.course,
+    });
+  });
+
+  // Unpublish a course
+  unpublishCourse = asyncHandler(async (req, res) => {
+    const { courseId } = req.params;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
+    // Call service
+    const result = await courseService.unpublishCourse(courseId);
+
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Course unpublished successfully",
+      data: result.course,
+    });
+  });
+
+  // Archive a course
+  archiveCourse = asyncHandler(async (req, res) => {
+    const { courseId } = req.params;
+    const { reason } = req.body; // Optional reason for archiving
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
+    // Call service
+    const result = await courseService.archiveCourse(courseId, reason);
+
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Course archived successfully",
+      data: result.course,
+    });
+  });
+
+  // Unarchive a course
+  unarchiveCourse = asyncHandler(async (req, res) => {
+    const { courseId } = req.params;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
+    // Call service
+    const result = await courseService.unarchiveCourse(courseId);
+
+    if (!result.success) {
+      return res.status(404).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Course unarchived successfully. It is now in draft status.",
+      data: result.course,
+    });
+  });
+
+  // Soft delete a course
+  deleteCourse = asyncHandler(async (req, res) => {
+    const { courseId } = req.params;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid course ID format",
+      });
+    }
+
+    // Call service
+    const result = await courseService.deleteCourse(courseId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        message: result.message,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Course deleted successfully",
+      data: null,
+    });
+  });
 }
 
 module.exports = new CourseController();
-
-
- 

@@ -1,90 +1,145 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
-const multer = require("multer");
-const courseController = require("../controllers/courseController");
-const {
-  courseValidators,
-  handleValidationErrors,
-} = require("../validators/courseValidator");
+const courseController = require('../controllers/courseController');
+// const { protect, authorizeInstructor, authorizeAdmin } = require('../middleware/auth');
 
-const upload = multer({ dest: "uploads/" });
+// ============================================
+// PUBLIC ROUTES (No Authentication Required)
+// ============================================
 
-/* --------------------------------------
-   PUBLIC ROUTES (available without auth)
---------------------------------------- */
-
-// Public course list
-router.get("/public", courseController.getAllCourses);
-
-// Search
-router.get("/search", courseController.searchCourses);
-
-// Filter
-router.get("/filter", courseController.filterCourses);
-
-// Preview (before purchase)
-router.get("/preview/:courseId", courseController.getCoursePreviewById);
-
-// Cart / Wishlist
-router.post("/cart", courseController.getCoursesForCart);
-router.post("/wishlist", courseController.getCoursesForWishlist);
-
-/* --------------------------------------
-   PROTECTED ROUTES (enrolled students)
---------------------------------------- */
-
-router.get("/learning/:courseId", courseController.getFullCourseById);
-
-/* --------------------------------------
-   ADMIN / INSTRUCTOR ROUTES
---------------------------------------- */
-
-router.post(
-  "/",
-  upload.array("images", 20),
-  courseValidators.createCourse,
-  handleValidationErrors,
-  courseController.createCourse
-);
-
-router.put(
-  "/:courseId",
-  upload.array("images", 20),
-  courseValidators.validateCourseId,
-  handleValidationErrors,
-  courseController.updateCourse
-);
-
-router.delete(
-  "/:courseId",
-  courseValidators.validateCourseId,
-  handleValidationErrors,
-  courseController.deleteCourse
-);
-
-/* --------------------------------------
-   SHARED ROUTES
---------------------------------------- */
-
-router.post(
-  "/by-ids",
-  courseValidators.validateCourseIds,
-  handleValidationErrors,
-  courseController.getCoursesByIds
-);
-
+// Get all published courses
 router.get(
-  "/:courseId",
-  courseValidators.validateCourseId,
-  handleValidationErrors,
+  '/',
+  courseController.getAllCourses
+);
+
+// Search courses with filters
+router.get(
+  '/search',
+  courseController.searchCourses
+);
+
+// Filter courses
+router.get(
+  '/filter',
+  courseController.filterCourses
+);
+
+// Get course preview (public view before purchase)
+router.get(
+  '/preview/:courseId',
+  courseController.getCoursePreviewById
+);
+
+// Get single course details
+router.get(
+  '/:courseId',
   courseController.getSingleCourse
 );
 
+// ============================================
+// AUTHENTICATED USER ROUTES
+// ============================================
+
+// Get courses for cart (minimal data)
+router.post(
+  '/cart/bulk',
+  // protect,
+  courseController.getCoursesForCart
+);
+
+// Get courses for wishlist (minimal data)
+router.post(
+  '/wishlist/bulk',
+  // protect,
+  courseController.getCoursesForWishlist
+);
+
+// Get courses by IDs (bulk fetch)
+router.post(
+  '/bulk',
+  // protect,
+  courseController.getCoursesByIds
+);
+
+// Get full course content (for enrolled students)
 router.get(
-  "/instructor/:instructorId",
-  // authMiddleware, // Add authentication
+  '/enrolled/:courseId',
+  // protect,
+  courseController.getFullCourseById
+);
+
+// ============================================
+// INSTRUCTOR ROUTES (Course Management)
+// ============================================
+
+// Create new course
+router.post(
+  '/',
+  // protect,
+  // authorizeInstructor,
+  courseController.createCourse
+);
+
+// Update course
+router.put(
+  '/:courseId',
+  // protect,
+  // authorizeInstructor,
+  courseController.updateCourse
+);
+
+// Get courses by instructor ID with optional status filter
+// Query params: ?status=draft|published|archived
+router.get(
+  '/instructor/:instructorId',
+  // protect,
+  // authorizeInstructor,
   courseController.getCoursesByInstructorId
 );
 
+// ============================================
+// COURSE STATUS MANAGEMENT ROUTES
+// ============================================
+
+// Publish course
+router.patch(
+  '/:courseId/publish',
+  // protect,
+  // authorizeInstructor,
+  courseController.publishCourse
+);
+
+// Unpublish course
+router.patch(
+  '/:courseId/unpublish',
+  // protect,
+  // authorizeInstructor,
+  courseController.unpublishCourse
+);
+
+// Archive course
+router.patch(
+  '/:courseId/archive',
+  // protect,
+  // authorizeInstructor,
+  courseController.archiveCourse
+);
+
+// Unarchive course
+router.patch(
+  '/:courseId/unarchive',
+  // protect,
+  // authorizeInstructor,
+  courseController.unarchiveCourse
+);
+
+// Soft delete course
+router.delete(
+  '/:courseId',
+  // protect,
+  // authorizeInstructor,
+  courseController.deleteCourse
+);
 
 module.exports = router;
