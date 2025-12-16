@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const courseController = require('../controllers/courseController');
+const { upload } = require('../middleware/fileUpload');
 // const { protect, authorizeInstructor, authorizeAdmin } = require('../middleware/auth');
 
 // ============================================
@@ -78,6 +79,7 @@ router.post(
   '/',
   // protect,
   // authorizeInstructor,
+  upload.array('images', 20), // Max 10 images (main + lessons)
   courseController.createCourse
 );
 
