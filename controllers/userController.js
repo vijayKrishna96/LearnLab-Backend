@@ -32,7 +32,7 @@ const getAllUsers = async (req, res) => {
             .skip(skip)
             .limit(parseInt(limit, 10))
             .populate([
-                { path: "courses", select: "-__v" },
+                { path: "purchasedCourses", select: "-__v" },
                 { path: "wishlistDetails" },
                 { path: "purchasedCourseDetails" }
             ]);
