@@ -2,6 +2,7 @@ const { User, Student, Instructor, Admin } = require('../models/userModel');
 const bcrypt = require('bcryptjs');
 const { generateUserToken } = require('../utils/generateToken');
 const { uploadCloudinary } = require('../utils/uploadCloudinary');
+const validators = require('../utils/validators');
 
 
 const getAllUsers = async (req, res) => {
@@ -107,102 +108,118 @@ const getUserById = async (req, res) => {
 };
 
 const registerUser = async (req, res) => {
-    try {
-        console.log("Registration request:", req.body);
-        
-        const { name, email, password, role } = req.body;
+  try {
+    console.log("Registration request:", req.body);
+    
+    const { name, email, password, role } = req.body;
 
-        // Validate required fields
-        if (!name || !email || !password || !role) {
-            return res.status(400).json({ 
-                success: false,
-                message: "All fields are required" 
-            });
-        }
+    // ✅ Validation
+    if (!name || !email || !password || !role) {
+      return res.status(400).json({ 
+        success: false,
+        message: "All fields are required" 
+      });
+    }
 
-        // Validate role
-        const validRoles = ["student", "instructor", "admin"];
-        if (!validRoles.includes(role)) {
-            return res.status(400).json({ 
-                success: false,
-                message: "Invalid role",
-                validRoles 
-            });
-        }
+    // Email validation
+    if (!validators.isValidEmail(email)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid email format" 
+      });
+    }
 
-        // Check if user already exists
-        const exists = await Student.findOne({ email }) || 
-                      await Instructor.findOne({ email }) || 
-                      await Admin.findOne({ email });
-        
-        if (exists) {
-            return res.status(400).json({ 
-                success: false,
-                message: "User with this email already exists" 
-            });
-        }
+    // Password strength
+    if (!validators.isStrongPassword(password)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Password must be 8+ chars with uppercase, lowercase, number, and special character" 
+      });
+    }
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
+    // Role validation
+    const validRoles = ["student", "instructor", "admin"];
+    if (!validators.isValidEnum(role, validRoles)) {
+      return res.status(400).json({ 
+        success: false,
+        message: "Invalid role",
+        validRoles 
+      });
+    }
 
-        // Create user based on role
-        const userData = {
-            name,
-            email: email.toLowerCase(),
-            password: hashedPassword,
-            role
-        };
-
-        let user;
-        
-        if (role === "student") {
-            user = await Student.create(userData);
-        } else if (role === "instructor") {
-            user = await Instructor.create(userData);
-        } else if (role === "admin") {
-            user = await Admin.create(userData);
-        }
-
-        // Return success WITHOUT token
-        return res.status(201).json({
-            success: true,
-            message: `${role} registered successfully!`,
-            user: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                verified: user.verified,
-                createdAt: user.createdAt
-            }
-            // NO TOKEN HERE
-        });
-
-    } catch (error) {
-        console.error("Registration error:", error);
-        
-        // Handle specific errors
-        if (error.code === 11000) {
-            return res.status(400).json({ 
-                success: false,
-                message: "Email already exists" 
-            });
-        }
-        
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({ 
-                success: false,
-                message: "Validation error",
-                error: error.message 
-            });
-        }
-        
-        return res.status(500).json({ 
+    // Check if user already exists
+    const exists = await Student.findOne({ email }) || 
+                  await Instructor.findOne({ email }) || 
+                  await Admin.findOne({ email });
+    
+    if (exists) {
+        return res.status(400).json({ 
             success: false,
-            message: "Internal server error",
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            message: "User with this email already exists" 
         });
     }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user based on role
+    const userData = {
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role
+    };
+
+    let user;
+    
+    if (role === "student") {
+        user = await Student.create(userData);
+    } else if (role === "instructor") {
+        user = await Instructor.create(userData);
+    } else if (role === "admin") {
+        user = await Admin.create(userData);
+    }
+
+    // Return success WITHOUT token
+    return res.status(201).json({
+        success: true,
+        message: `${role} registered successfully!`,
+        user: {
+            id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            verified: user.verified,
+            createdAt: user.createdAt
+        }
+        // NO TOKEN HERE
+    });
+
+  } catch (error) {
+    console.error("Registration error:", error);
+    
+    // Handle specific errors
+    if (error.code === 11000) {
+        return res.status(400).json({ 
+            success: false,
+            message: "Email already exists" 
+        });
+    }
+    
+    if (error.name === 'ValidationError') {
+        return res.status(400).json({ 
+            success: false,
+            message: "Validation error",
+            error: error.message 
+        });
+    }
+    
+    return res.status(500).json({ 
+        success: false,
+        message: "Internal server error",
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 };
 
 const updateUser = async (req, res) => {
