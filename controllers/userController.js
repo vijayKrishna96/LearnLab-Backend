@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { generateUserToken } = require('../utils/generateToken');
 const { uploadCloudinary } = require('../utils/uploadCloudinary');
 const validators = require('../utils/validators');
+const { sanitizeUser } = require('../utils/sanitizeResponse');
 
 
 const getAllUsers = async (req, res) => {
@@ -274,7 +275,7 @@ const userProfile = async (req, res) => {
                     role === "instructor" ? Instructor :
                     Admin;
 
-        const user = await Model.findOne({ email }).select("-password");
+        const user = await Model.findOne({ email });
         if (!user) return res.status(404).json({ message: "User not found" });
 
         res.json({ success: true, data: sanitizeUser(user) });

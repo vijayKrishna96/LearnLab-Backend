@@ -48,4 +48,4 @@ class CourseUtils {
   }
 }
 
-module.exports = CourseUtils;
+export default CourseUtils;
