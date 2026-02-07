@@ -15,8 +15,6 @@ router.get('/checkUser' ,userAuth, checkUser)
 
 router.get('/:userId' , getUserById);
 
-router.get('/user/:userId', getUserById)
-
 router.post('/register' , registerUser);
 
 router.patch('/update/:userId' ,upload.single("images"), updateUser);
