@@ -52,7 +52,7 @@ class CourseController {
 
       const processedModules = CourseUtils.processModulesWithImages(
         parsedModules,
-        lessonImages
+        lessonImages,
       );
 
       const totalDuration = CourseUtils.calculateTotalDuration(parsedModules);
@@ -150,71 +150,81 @@ class CourseController {
   });
 
   // Update course
- updateCourse = asyncHandler(async (req, res) => {
-  try {
-    const { courseId } = req.params;
-    const { title, modules, ...rest } = req.body;
+  updateCourse = asyncHandler(async (req, res) => {
+    try {
+      const { courseId } = req.params;
+      const { title, modules, ...rest } = req.body;
 
-    const course = await courseService.getCourseById(courseId);
-    if (!course) {
-      cleanupLocalFiles(req.files);
-      return res.status(404).json({ success: false, message: "Course not found" });
-    }
-
-    if (title && title !== course.title) {
-      const duplicate = await courseService.checkDuplicateTitle(title, courseId);
-      if (duplicate) {
+      const course = await courseService.getCourseById(courseId);
+      if (!course) {
         cleanupLocalFiles(req.files);
-        return res.status(409).json({ success: false, message: "Duplicate title" });
+        return res
+          .status(404)
+          .json({ success: false, message: "Course not found" });
       }
-    }
 
-    let updatedImage = course.image;
-    let updatedModules = course.modules;
-    let totalDuration = course.totalDuration;
-
-    if (modules) {
-      const parsedModules = CourseUtils.parseModules(modules);
-      totalDuration = CourseUtils.calculateTotalDuration(parsedModules);
-
-      if (req.files?.length) {
-        const uploadedImages = await imageService.uploadCourseImages(req.files);
-        updatedImage = uploadedImages[0] || course.image;
-
-        updatedModules = CourseUtils.processModulesWithImages(
-          parsedModules,
-          uploadedImages.slice(1),
-          course.modules
+      if (title && title !== course.title) {
+        const duplicate = await courseService.checkDuplicateTitle(
+          title,
+          courseId,
         );
-      } else {
-        updatedModules = CourseUtils.processModulesWithImages(
-          parsedModules,
-          [],
-          course.modules
-        );
+        if (duplicate) {
+          cleanupLocalFiles(req.files);
+          return res
+            .status(409)
+            .json({ success: false, message: "Duplicate title" });
+        }
       }
+
+      let updatedImage = course.image;
+      let updatedModules = course.modules;
+      let totalDuration = course.totalDuration;
+
+      if (modules) {
+        const parsedModules = CourseUtils.parseModules(modules);
+        totalDuration = CourseUtils.calculateTotalDuration(parsedModules);
+
+        if (req.files?.length) {
+          const uploadedImages = await imageService.uploadCourseImages(
+            req.files,
+          );
+          updatedImage = uploadedImages[0] || course.image;
+
+          updatedModules = CourseUtils.processModulesWithImages(
+            parsedModules,
+            uploadedImages.slice(1),
+            course.modules,
+          );
+        } else {
+          updatedModules = CourseUtils.processModulesWithImages(
+            parsedModules,
+            [],
+            course.modules,
+          );
+        }
+      }
+
+      const updatedCourse = await courseService.updateCourse(courseId, {
+        title: title || course.title,
+        image: updatedImage,
+        modules: updatedModules,
+        totalDuration,
+        requirements: rest.requirements
+          ? JSON.parse(rest.requirements)
+          : course.requirements,
+        whatYouWillLearn: rest.whatYouWillLearn
+          ? JSON.parse(rest.whatYouWillLearn)
+          : course.whatYouWillLearn,
+        tags: rest.tags ? JSON.parse(rest.tags) : course.tags,
+        ...rest,
+      });
+
+      res.json({ success: true, course: updatedCourse });
+    } catch (error) {
+      cleanupLocalFiles(req.files);
+      res.status(500).json({ success: false, message: error.message });
     }
-
-    const updatedCourse = await courseService.updateCourse(courseId, {
-      title: title || course.title,
-      image: updatedImage,
-      modules: updatedModules,
-      totalDuration,
-      requirements: rest.requirements ? JSON.parse(rest.requirements) : course.requirements,
-      whatYouWillLearn: rest.whatYouWillLearn
-        ? JSON.parse(rest.whatYouWillLearn)
-        : course.whatYouWillLearn,
-      tags: rest.tags ? JSON.parse(rest.tags) : course.tags,
-      ...rest
-    });
-
-    res.json({ success: true, course: updatedCourse });
-  } catch (error) {
-    cleanupLocalFiles(req.files);
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
+  });
 
   // Get course preview (for browsing before purchase)
   getCoursePreviewById = asyncHandler(async (req, res) => {
@@ -373,7 +383,7 @@ class CourseController {
     // Call service
     const courses = await courseService.getCoursesByInstructorId(
       instructorId,
-      status
+      status,
     );
 
     // No courses found

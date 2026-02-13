@@ -1,27 +1,49 @@
+// const multer = require("multer");
+
+// // Store file in memory (required for Vercel)
+// const storage = multer.memoryStorage();
+
+// // Allow images only
+// const fileFilter = (req, file, cb) => {
+//   const allowedTypes = /jpeg|jpg|png|gif|webp/;
+
+//   const extname = allowedTypes.test(
+//     require("path").extname(file.originalname).toLowerCase()
+//   );
+
+//   const mimetype = allowedTypes.test(file.mimetype);
+
+//   if (extname && mimetype) {
+//     cb(null, true);
+//   } else {
+//     cb(new Error("Only image files are allowed!"), false);
+//   }
+// };
+
+// const upload = multer({
+//   storage,
+//   fileFilter,
+//   limits: {
+//     fileSize: 5 * 1024 * 1024, // 5MB
+//   },
+// });
+
+// module.exports = { upload };
+
+
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, "../uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
+// Store file in memory (required for Vercel)
+const storage = multer.memoryStorage();
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir); // Save to uploads directory
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
-
-// File filter for images only
+// Allow images only
 const fileFilter = (req, file, cb) => {
   const allowedTypes = /jpeg|jpg|png|gif|webp/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+
+  const extname = allowedTypes.test(
+    require("path").extname(file.originalname).toLowerCase()
+  );
+
   const mimetype = allowedTypes.test(file.mimetype);
 
   if (extname && mimetype) {
@@ -32,11 +54,11 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+  storage,
+  fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
-  }
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
 });
 
 module.exports = { upload };
