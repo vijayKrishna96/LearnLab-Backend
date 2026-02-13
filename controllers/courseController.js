@@ -1,5 +1,5 @@
 const { default: mongoose } = require("mongoose");
-const asyncHandler = require("../middleware/asyncHandler").default;
+const asyncHandler = require("../middleware/asyncHandler");
 const courseService = require("../services/courseService");
 const imageService = require("../services/imageService");
 const CourseUtils = require("../utils/courseUtils");
