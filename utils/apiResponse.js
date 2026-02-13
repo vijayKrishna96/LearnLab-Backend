@@ -18,6 +18,8 @@ class APIResponse {
   }
 
   static paginated(data, page, limit, total, message = "Success") {
+    const totalPages = Math.ceil(total / limit);
+
     return {
       success: true,
       message,
@@ -26,11 +28,11 @@ class APIResponse {
         page: Number(page),
         limit: Number(limit),
         total,
-        totalPages: Math.ceil(total / limit),
-        hasNextPage: page < Math.ceil(total / limit)
+        totalPages,
+        hasNextPage: Number(page) < totalPages
       }
     };
   }
 }
 
-export default APIResponse;
+module.exports = APIResponse;

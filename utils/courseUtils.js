@@ -1,4 +1,5 @@
 class CourseUtils {
+  
   static parseModules(modules) {
     return typeof modules === "string" ? JSON.parse(modules) : modules;
   }
@@ -15,12 +16,11 @@ class CourseUtils {
     }, 0);
   }
 
-  /**
-   * Assign lesson images safely
-   * - uploadedImages: only lesson images
-   * - existingModules: used during update
-   */
-  static processModulesWithImages(modules, uploadedImages = [], existingModules = []) {
+  static processModulesWithImages(
+    modules,
+    uploadedImages = [],
+    existingModules = []
+  ) {
     let imageIndex = 0;
 
     return modules.map((module, mIdx) => {
@@ -32,20 +32,20 @@ class CourseUtils {
         lessons: module.lessons.map((lesson, lIdx) => {
           const existingLesson = existingModule?.lessons?.[lIdx];
 
-          const image =
-            uploadedImages[imageIndex]
-              ? uploadedImages[imageIndex++]
-              : existingLesson?.image || null;
+          const image = uploadedImages[imageIndex]
+            ? uploadedImages[imageIndex++]
+            : existingLesson?.image || null;
 
           return {
             title: lesson.title,
             duration: lesson.duration,
-            image
+            image,
           };
-        })
+        }),
       };
     });
   }
+
 }
 
-export default CourseUtils;
+module.exports = CourseUtils;
