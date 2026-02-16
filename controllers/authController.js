@@ -1,9 +1,9 @@
 const bcrypt = require("bcryptjs");
 const { User } = require("../models/userModel");
-const { 
-  generateAccessToken, 
-  generateRefreshToken, 
-  verifyToken 
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyToken,
 } = require("../utils/generateToken");
 
 const loginUser = async (req, res) => {
@@ -13,8 +13,7 @@ const loginUser = async (req, res) => {
     // 🔥 Discriminator-aware query (much cleaner)
     const user = await User.findOne({ email }).select("+password");
 
-    if (!user)
-      return res.status(404).json({ message: "User not found" });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch)
@@ -30,24 +29,28 @@ const loginUser = async (req, res) => {
     // Set cookies
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true, // always true in production - frontend must use HTTPS
+      sameSite: "none" ,
       maxAge: 15 * 60 * 1000,
     });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: true,
+      sameSite: "none",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({
       success: true,
       message: `${user.role} login successful`,
-      user: { id: user._id, role: user.role, email: user.email, name: user.name },
+      user: {
+        id: user._id,
+        role: user.role,
+        email: user.email,
+        name: user.name,
+      },
     });
-
   } catch (err) {
     return res.status(500).json({
       message: "Error logging in",
@@ -59,14 +62,17 @@ const loginUser = async (req, res) => {
 const refreshToken = async (req, res) => {
   try {
     const refreshToken = req.cookies.refreshToken;
-    if (!refreshToken) return res.status(401).json({ message: "No refresh token" });
+    if (!refreshToken)
+      return res.status(401).json({ message: "No refresh token" });
 
     const decoded = verifyToken(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-    if (!decoded) return res.status(401).json({ message: "Invalid refresh token" });
+    if (!decoded)
+      return res.status(401).json({ message: "Invalid refresh token" });
 
     // 🔥 Only need to query User — discriminator applied automatically
     const user = await User.findById(decoded.id);
-    if (!user || !user.active) return res.status(403).json({ message: "User inactive" });
+    if (!user || !user.active)
+      return res.status(403).json({ message: "User inactive" });
 
     const newAccessToken = generateAccessToken(user);
     const newRefreshToken = generateRefreshToken(user);
@@ -86,7 +92,6 @@ const refreshToken = async (req, res) => {
     });
 
     return res.status(200).json({ success: true });
-
   } catch (err) {
     return res.status(500).json({
       message: "Refresh failed",
@@ -119,7 +124,7 @@ const logout = (req, res) => {
       error: err.message,
     });
   }
-}
+};
 
 const verifyLogin = async (req, res) => {
   try {
@@ -147,9 +152,8 @@ const verifyLogin = async (req, res) => {
         role: user.role,
         name: user.name,
         profilePicture: user.profilePicture || "",
-      }
+      },
     });
-
   } catch (err) {
     return res.status(500).json({
       loggedIn: false,
