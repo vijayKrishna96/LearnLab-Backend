@@ -13,6 +13,7 @@ const cookieOptions = (maxAge) => ({
   httpOnly: true,
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
+  domain: isProduction ? "learnlab-backend.onrender.com" : "localhost", 
   maxAge,
 });
 
