@@ -5,6 +5,7 @@ const {
   generateRefreshToken,
   verifyToken,
 } = require("../utils/generateToken");
+const { path } = require("..");
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -14,6 +15,7 @@ const cookieOptions = (maxAge) => ({
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
   domain: isProduction ? "learnlab-backend.onrender.com" : "localhost", 
+  path  : "/",
   maxAge,
 });
 
