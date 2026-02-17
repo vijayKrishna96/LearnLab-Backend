@@ -6,6 +6,8 @@ const {
   verifyToken,
 } = require("../utils/generateToken");
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
