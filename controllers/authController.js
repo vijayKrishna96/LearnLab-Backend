@@ -14,8 +14,8 @@ const cookieOptions = (maxAge) => ({
   httpOnly: true,
   secure: isProduction,
   sameSite: isProduction ? "none" : "lax",
-  domain: isProduction ? "learnlab-backend.onrender.com" : "localhost", 
-  path  : "/",
+  ...(isProduction && { domain: "learnlab-backend.onrender.com" }),
+  path: "/",
   maxAge,
 });
 
@@ -73,16 +73,8 @@ const refreshToken = async (req, res) => {
 
 const logout = (req, res) => {
   try {
-    // ✅ Fixed: clearCookie options must match the options used when setting
-    const clearOptions = {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-    };
-
-    res.clearCookie("accessToken", clearOptions);
-    res.clearCookie("refreshToken", clearOptions);
-
+    res.clearCookie("accessToken", cookieOptions(0));   // reuse same options
+    res.clearCookie("refreshToken", cookieOptions(0));
     return res.status(200).json({ success: true, message: "Logged out successfully" });
   } catch (err) {
     return res.status(500).json({ message: "Error logging out", error: err.message });
