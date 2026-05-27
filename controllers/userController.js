@@ -131,12 +131,12 @@ const registerUser = async (req, res) => {
     }
 
     // Password strength
-    if (!validators.isStrongPassword(password)) {
-      return res.status(400).json({ 
-        success: false,
-        message: "Password must be 8+ chars with uppercase, lowercase, number, and special character" 
-      });
-    }
+    // if (!validators.isStrongPassword(password)) {
+    //   return res.status(400).json({ 
+    //     success: false,
+    //     message: "Password must be 8+ chars with uppercase, lowercase, number, and special character" 
+    //   });
+    // }
 
     // Role validation
     const validRoles = ["student", "instructor", "admin"];

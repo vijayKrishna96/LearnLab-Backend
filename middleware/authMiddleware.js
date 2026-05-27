@@ -3,6 +3,8 @@ const { User } = require('../models/userModel');
 
 const authMiddleware = async (req, res, next) => {
   try {
+
+    console.log(req, "req")
     // Extract the token from cookies
     const token = req.cookies.accessToken;
 
